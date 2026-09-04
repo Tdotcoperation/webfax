@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#080b12">
+  <title>Web Modem — 실제 파일 전송</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="header">
+      <div>
+        <span class="kicker">AUDIO FILE MODEM</span>
+        <h1>Web Modem</h1>
+      </div>
+      <span class="live">REAL v1</span>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="send">전송</button>
+      <button class="tab" data-tab="receive">수신</button>
+    </nav>
+
+    <section id="send" class="page active">
+      <div class="intro">
+        <div class="orb">↗</div>
+        <h2>파일을 소리로 보내기</h2>
+        <p>파일 자체를 4-FSK 음성 신호로 변환해 스피커로 재생합니다.</p>
+      </div>
+
+      <label class="file-picker" for="file">
+        <input id="file" type="file">
+        <span class="plus">＋</span>
+        <strong id="fileName">파일 선택</strong>
+        <small id="fileInfo">작은 TXT·이미지 파일부터 권장 · 최대 8 KB</small>
+      </label>
+
+      <div class="settings">
+        <label>
+          <span>전송 모드</span>
+          <select id="speed">
+            <option value="20">일반 · 약 100 bit/s</option>
+            <option value="35">안정적 · 약 57 bit/s</option>
+          </select>
+        </label>
+        <div class="stat"><span>예상 시간</span><strong id="eta">—</strong></div>
+      </div>
+
+      <button id="sendBtn" class="primary" disabled>전송 시작</button>
+      <button id="stopSendBtn" class="secondary hidden">전송 중지</button>
+
+      <div id="sendBox" class="status hidden">
+        <div class="row"><strong id="sendState">준비 중</strong><span id="sendPct">0%</span></div>
+        <div class="progress"><i id="sendBar"></i></div>
+        <div class="wave" id="wave"></div>
+        <div class="details">
+          <span>4-FSK</span><span>900 / 1300 / 1700 / 2100 Hz</span>
+        </div>
+      </div>
+
+      <div class="notice">
+        <strong>테스트 방법</strong>
+        <p>송신 폰의 스피커를 통화 중인 폰의 마이크 가까이에 두고, 상대편에서는 통화 폰 스피커를 수신 폰 마이크 가까이에 둡니다. 먼저 두 폰을 가까이 둔 직접 테스트를 권장합니다.</p>
+      </div>
+    </section>
+
+    <section id="receive" class="page">
+      <div class="intro">
+        <div class="orb rx">↙</div>
+        <h2>소리로 파일 받기</h2>
+        <p>마이크에서 시작 신호를 찾고 실제 파일 바이트를 복원합니다.</p>
+      </div>
+
+      <div class="receiver">
+        <div id="rxRing" class="ring">
+          <div><span id="rxIcon">◎</span><strong id="rxState">대기 중</strong></div>
+        </div>
+        <p id="rxDesc">수신 시작을 누른 뒤 송신을 시작하세요.</p>
+      </div>
+
+      <div class="settings">
+        <label>
+          <span>수신 모드</span>
+          <select id="rxSpeed">
+            <option value="20">일반 · 20 ms/symbol</option>
+            <option value="35">안정적 · 35 ms/symbol</option>
+          </select>
+        </label>
+        <div class="stat"><span>복원 데이터</span><strong id="rxBytes">0 B</strong></div>
+      </div>
+
+      <button id="rxBtn" class="primary">수신 시작</button>
+
+      <div id="rxBox" class="status hidden">
+        <div class="row"><strong>입력 신호</strong><span id="rxLevel">-∞ dB</span></div>
+        <div class="progress signal"><i id="rxBar"></i></div>
+        <div class="details">
+          <span id="rxPhase">시작음 탐색</span>
+          <span id="rxFreq">— Hz</span>
+        </div>
+      </div>
+
+      <div id="result" class="result hidden">
+        <span class="ok">✓ CRC 확인 완료</span>
+        <h3 id="resultName">파일</h3>
+        <p id="resultMeta">0 B</p>
+        <a id="download" class="primary link" download>파일 저장</a>
+      </div>
+
+      <div id="errorBox" class="error hidden"></div>
+    </section>
+
+    <footer>Web Modem REAL v1 · 브라우저 내부에서만 처리 · 서버 업로드 없음</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
