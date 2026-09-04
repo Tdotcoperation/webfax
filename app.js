@@ -9,13 +9,15 @@ for(let i=0;i<28;i++){const x=document.createElement('i');x.style.animationDelay
 
 const enc=new TextEncoder(), dec=new TextDecoder();
 let chosen=null, txCtx=null, txNode=null, sending=false;
-const MAX_FILE=8*1024, FREQS=[900,1300,1700,2100], LEADER=2500;
+const MAX_FILE=256*1024, FREQS=[900,1300,1700,2100], LEADER=2500;
 
-function fmt(n){if(n<1024)return n+' B';return (n/1024).toFixed(1)+' KB'}
+function fmt(n){if(n<1024)return n+' B';if(n<1024*1024)return (n/1024).toFixed(1)+' KB';return (n/1024/1024).toFixed(2)+' MB'}
 function eta(bytes,ms){
   const meta=24+(chosen?.name?.length||0)+(chosen?.type?.length||0);
   const sec=(bytes+meta)*4*ms/1000+1.5;
-  return sec<60?Math.ceil(sec)+'초':Math.floor(sec/60)+'분 '+Math.ceil(sec%60)+'초';
+  if(sec<60)return Math.ceil(sec)+'초';
+  if(sec<3600)return Math.floor(sec/60)+'분 '+Math.ceil(sec%60)+'초';
+  return Math.floor(sec/3600)+'시간 '+Math.ceil((sec%3600)/60)+'분';
 }
 function crc32(bytes){
   let crc=0xffffffff;
@@ -30,6 +32,7 @@ function readU32(a,o){return ((a[o]<<24)>>>0)+(a[o+1]<<16)+(a[o+2]<<8)+a[o+3]}
 async function buildPacket(file){
   const name=enc.encode(file.name), mime=enc.encode(file.type||'application/octet-stream');
   if(name.length>255||mime.length>255)throw new Error('파일명 또는 MIME 정보가 너무 깁니다.');
+  if(file.size>MAX_FILE)throw new Error('현재 버전은 최대 256 KB 파일까지 전송할 수 있습니다.');
   const payload=new Uint8Array(await file.arrayBuffer());
   const header=new Uint8Array([87,77,70,49,name.length,mime.length,...u32be(payload.length)]);
   const packetNoCrc=new Uint8Array(header.length+name.length+mime.length+payload.length);
@@ -39,23 +42,25 @@ async function buildPacket(file){
   return packet;
 }
 
-$('#file').onchange=()=>{
+function refreshFileState(){
   chosen=$('#file').files?.[0]||null;
-  if(!chosen)return;
+  const btn=$('#sendBtn');
+  if(!chosen){btn.disabled=true;return}
   $('#fileName').textContent=chosen.name;
-  $('#fileInfo').textContent=fmt(chosen.size)+' · '+(chosen.type||'알 수 없는 형식');
-  if(chosen.size>MAX_FILE){
-    $('#sendBtn').disabled=true;
-    $('#fileInfo').textContent+=' · 8 KB 초과';
-  }else $('#sendBtn').disabled=false;
+  const tooBig=chosen.size>MAX_FILE;
+  $('#fileInfo').textContent=fmt(chosen.size)+' · '+(chosen.type||'알 수 없는 형식')+(tooBig?' · 256 KB 초과':'');
+  btn.disabled=false;
   $('#eta').textContent=eta(chosen.size,+$('#speed').value);
-};
+}
+$('#file').addEventListener('change',refreshFileState);
+$('#file').addEventListener('input',refreshFileState);
 $('#speed').onchange=()=>{if(chosen)$('#eta').textContent=eta(chosen.size,+$('#speed').value)};
 
 $('#sendBtn').onclick=async()=>{
   if(!chosen||sending)return;
   $('#errorBox').classList.add('hidden');
   try{
+    if(chosen.size>MAX_FILE)throw new Error('파일이 너무 큽니다. 현재는 256 KB 이하 파일로 테스트해주세요.');
     const AudioCtx=window.AudioContext||window.webkitAudioContext;
     if(!AudioCtx)throw new Error('이 브라우저는 Web Audio API를 지원하지 않습니다.');
     const packet=await buildPacket(chosen);
