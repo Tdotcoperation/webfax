@@ -54,10 +54,16 @@ $('#speed').onchange=()=>{if(chosen)$('#eta').textContent=eta(chosen.size,+$('#s
 
 $('#sendBtn').onclick=async()=>{
   if(!chosen||sending)return;
+  $('#errorBox').classList.add('hidden');
   try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)throw new Error('이 브라우저는 Web Audio API를 지원하지 않습니다.');
     const packet=await buildPacket(chosen);
-    txCtx=new (window.AudioContext||window.webkitAudioContext)();
-    await txCtx.audioWorklet.addModule('modem-worklet.js');
+    txCtx=new AudioCtx();
+    if(!txCtx.audioWorklet)throw new Error('이 브라우저는 AudioWorklet을 지원하지 않습니다. 최신 Chrome 또는 Safari를 사용하세요.');
+    await txCtx.audioWorklet.addModule('./modem-worklet.js');
+    await txCtx.resume();
+    if(txCtx.state!=='running')throw new Error('오디오 출력을 시작하지 못했습니다. 브라우저의 소리 재생 권한을 확인하세요.');
     txNode=new AudioWorkletNode(txCtx,'modem-modulator');
     txNode.connect(txCtx.destination);
     const copy=packet.slice();
@@ -73,7 +79,12 @@ $('#sendBtn').onclick=async()=>{
     $('#sendBox').classList.remove('hidden');$('#stopSendBtn').classList.remove('hidden');$('#sendBtn').classList.add('hidden');
     $('#sendState').textContent='시작 신호 전송 중';$('#sendPct').textContent='0%';$('#sendBar').style.width='0%';
     txNode.port.postMessage({type:'start',bytes:copy.buffer,symbolMs:+$('#speed').value},[copy.buffer]);
-  }catch(err){alert('전송 시작 실패: '+err.message);finishSend(false)}
+  }catch(err){
+    console.error(err);
+    alert('전송 시작 실패: '+(err?.message||err));
+    showErr('전송 시작 실패: '+(err?.message||err));
+    finishSend(false);
+  }
 };
 $('#stopSendBtn').onclick=()=>finishSend(false);
 function finishSend(ok){
@@ -84,7 +95,7 @@ function finishSend(ok){
   if(ok){$('#sendState').textContent='전송 완료';$('#sendPct').textContent='100%';$('#sendBar').style.width='100%'}
 }
 
-let rxCtx=null,rxNode=null,rxStream=null,receiving=false;
+let rxCtx=null,rxNode=null,rxStream=null,rxSilent=null,receiving=false;
 let phase='leader',leaderHits=0,gapHits=0;
 let dataBuf=[],symbolSamples=0,decoded=[],dibits=[],expectedTotal=null;
 let lastFreq=0;
@@ -111,23 +122,33 @@ $('#rxBtn').onclick=async()=>{
   if(receiving){stopRx();return}
   resetRx();
   try{
+    if(!navigator.mediaDevices?.getUserMedia)throw new Error('이 브라우저에서는 마이크 입력을 사용할 수 없습니다. HTTPS로 접속하세요.');
     rxStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
-    rxCtx=new (window.AudioContext||window.webkitAudioContext)();
-    await rxCtx.audioWorklet.addModule('modem-worklet.js');
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)throw new Error('이 브라우저는 Web Audio API를 지원하지 않습니다.');
+    rxCtx=new AudioCtx();
+    if(!rxCtx.audioWorklet)throw new Error('이 브라우저는 AudioWorklet을 지원하지 않습니다.');
+    await rxCtx.audioWorklet.addModule('./modem-worklet.js');
+    await rxCtx.resume();
     const src=rxCtx.createMediaStreamSource(rxStream);
     rxNode=new AudioWorkletNode(rxCtx,'modem-capture');
+    rxSilent=rxCtx.createGain();
+    rxSilent.gain.value=0;
     src.connect(rxNode);
+    rxNode.connect(rxSilent).connect(rxCtx.destination);
     rxNode.port.onmessage=e=>processChunk(new Float32Array(e.data));
     receiving=true;symbolSamples=Math.round(rxCtx.sampleRate*(+$('#rxSpeed').value)/1000);
     $('#rxBtn').textContent='수신 중지';$('#rxBox').classList.remove('hidden');$('#rxRing').classList.add('listening');
     $('#rxState').textContent='수신 대기';$('#rxDesc').textContent='송신기에서 전송 시작을 눌러주세요.';
   }catch(err){
-    showErr('마이크를 시작할 수 없습니다. HTTPS에서 열었는지, 마이크 권한이 허용됐는지 확인하세요.');
+    console.error(err);
+    showErr('마이크 시작 실패: '+(err?.message||err));
+    rxStream?.getTracks().forEach(t=>t.stop());
   }
 };
 function stopRx(){
   receiving=false;rxStream?.getTracks().forEach(t=>t.stop());try{rxCtx?.close()}catch{}
-  rxCtx=rxNode=rxStream=null;$('#rxBtn').textContent='수신 시작';$('#rxRing').classList.remove('listening');
+  rxCtx=rxNode=rxStream=rxSilent=null;$('#rxBtn').textContent='수신 시작';$('#rxRing').classList.remove('listening');
   $('#rxState').textContent='대기 중';$('#rxDesc').textContent='수신 시작을 누른 뒤 송신을 시작하세요.';
 }
 function processChunk(a){
