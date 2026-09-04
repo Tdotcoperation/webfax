@@ -10,42 +10,20 @@ async function openAudio(){
  if(!navigator.mediaDevices?.getUserMedia)throw Error('이 브라우저는 마이크 입력을 지원하지 않습니다. HTTPS에서 실행하세요.');
  micStatus('마이크: 여는 중');log('마이크 요청 시작');
  let stream;
- try{
-  stream=await navigator.mediaDevices.getUserMedia({audio:true});
- }catch(e){
-  micStatus('마이크: 실패');log('마이크 요청 실패 · '+e.name);throw Error(`마이크를 열 수 없습니다 (${e.name}: ${e.message})`);
- }
+ try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}
+ catch(e){micStatus('마이크: 실패');log('마이크 요청 실패 · '+e.name);throw Error(`마이크를 열 수 없습니다 (${e.name}: ${e.message})`)}
  const track=stream.getAudioTracks()[0];
- if(!track||track.readyState!=='live'){stream.getTracks().forEach(t=>t.stop());micStatus('마이크: 비활성');throw Error('마이크 트랙이 활성 상태가 아닙니다.');}
+ if(!track||track.readyState!=='live'){stream.getTracks().forEach(t=>t.stop());micStatus('마이크: 비활성');throw Error('마이크 트랙이 활성 상태가 아닙니다.')}
  F.stream=stream;micStatus('마이크: 활성');log(`마이크 활성 · ${track.label||'기본 마이크'}`);
- track.onended=()=>{micStatus('마이크: 종료됨');log('마이크 트랙 종료');};
- track.onmute=()=>{micStatus('마이크: 음소거됨');log('브라우저가 마이크 입력을 음소거함');};
- track.onunmute=()=>{micStatus('마이크: 활성');log('마이크 입력 재개');};
- const A=window.AudioContext||window.webkitAudioContext;
- F.ctx=new A();await F.ctx.resume();
- F.src=F.ctx.createMediaStreamSource(F.stream);
- F.decoder=new T.V21Decoder(F.ctx.sampleRate,onFrame);
- try{
-  await F.ctx.audioWorklet.addModule('./modem-worklet.js');
-  F.node=new AudioWorkletNode(F.ctx,'modem-capture');
-  F.silent=F.ctx.createGain();F.silent.gain.value=0;
-  F.src.connect(F.node);F.node.connect(F.silent).connect(F.ctx.destination);
-  F.node.port.onmessage=e=>onAudio(new Float32Array(e.data));
-  log('오디오 입력 엔진: AudioWorklet');
- }catch(e){
-  log('AudioWorklet 실패 · ScriptProcessor 폴백');
-  F.scriptNode=F.ctx.createScriptProcessor(1024,1,1);
-  F.silent=F.ctx.createGain();F.silent.gain.value=0;
-  F.src.connect(F.scriptNode);F.scriptNode.connect(F.silent).connect(F.ctx.destination);
-  F.scriptNode.onaudioprocess=e=>{
-   const input=e.inputBuffer.getChannelData(0);
-   onAudio(new Float32Array(input));
-  };
- }
- await new Promise(r=>setTimeout(r,120));
- if(track.readyState!=='live')throw Error('마이크가 열린 직후 종료되었습니다.');
+ track.onended=()=>{micStatus('마이크: 종료됨');log('마이크 트랙 종료')};
+ track.onmute=()=>{micStatus('마이크: 음소거됨');log('브라우저가 마이크 입력을 음소거함')};
+ track.onunmute=()=>{micStatus('마이크: 활성');log('마이크 입력 재개')};
+ const A=window.AudioContext||window.webkitAudioContext;F.ctx=new A();await F.ctx.resume();F.src=F.ctx.createMediaStreamSource(F.stream);F.decoder=new T.V21Decoder(F.ctx.sampleRate,onFrame);
+ try{await F.ctx.audioWorklet.addModule('./modem-worklet.js');F.node=new AudioWorkletNode(F.ctx,'modem-capture');F.silent=F.ctx.createGain();F.silent.gain.value=0;F.src.connect(F.node);F.node.connect(F.silent).connect(F.ctx.destination);F.node.port.onmessage=e=>onAudio(new Float32Array(e.data));log('오디오 입력 엔진: AudioWorklet')}
+ catch(e){log('AudioWorklet 실패 · ScriptProcessor 폴백');F.scriptNode=F.ctx.createScriptProcessor(1024,1,1);F.silent=F.ctx.createGain();F.silent.gain.value=0;F.src.connect(F.scriptNode);F.scriptNode.connect(F.silent).connect(F.ctx.destination);F.scriptNode.onaudioprocess=e=>onAudio(new Float32Array(e.inputBuffer.getChannelData(0)))}
+ await new Promise(r=>setTimeout(r,120));if(track.readyState!=='live')throw Error('마이크가 열린 직후 종료되었습니다.')
 }
-function onAudio(a){if(!F.ctx)return;const sr=F.ctx.sampleRate,e11=energy(a,sr,1100),e21=energy(a,sr,2100),tot=Math.max(1e-9,a.reduce((s,v)=>s+v*v,0));if(e11/tot>60)F.cng++;else F.cng=Math.max(0,F.cng-1);if(e21/tot>60)F.ced++;else F.ced=Math.max(0,F.ced-1);if(F.ced===5&&F.role==='tx'){log('CED 2100 Hz 응답 감지');setState('상대 팩스 응답','DIS 제어 프레임을 기다립니다.')}if(F.cng===5&&F.role==='rx'){log('CNG 1100 Hz 호출 감지');if(F.state==='wait-cng')answerAsFax()}F.decoder?.push(a)}
+function onAudio(a){if(!F.ctx)return;const sr=F.ctx.sampleRate,e11=energy(a,sr,1100),e21=energy(a,sr,2100),tot=Math.max(1e-9,a.reduce((s,v)=>s+v*v,0));if(e11/tot>60)F.cng++;else F.cng=Math.max(0,F.cng-1);if(e21/tot>60)F.ced++;else F.ced=Math.max(0,F.ced-1);if(F.ced===5&&F.role==='tx'){log('CED 2100 Hz 응답 감지');setState('상대 팩스 응답','DIS 제어 프레임을 기다립니다.')}if(F.cng===5&&F.role==='rx'){log('CNG 1100 Hz 호출 감지');$('#faxFreq').textContent='1100 Hz CNG'}F.decoder?.push(a)}
 function stopTone(){clearInterval(F.timer);F.timer=null;try{F.osc?.stop()}catch{}F.osc=null}
 function tone(freq,sec=.5){return new Promise(res=>{const o=F.ctx.createOscillator(),g=F.ctx.createGain();o.frequency.value=freq;g.gain.value=.3;o.connect(g).connect(F.ctx.destination);o.onended=res;o.start();o.stop(F.ctx.currentTime+sec)})}
 function delay(ms){return new Promise(r=>setTimeout(r,ms))}
@@ -58,12 +36,10 @@ async function onFrame(fr){const type=fr[2]&0xfe,name=T.NAMES[type]||('0x'+type.
   if(type===T.FCF.FTT&&F.state==='wait-cfr'){F.state='failed';setState('훈련 실패(FTT)','전화망에서 V.27ter 훈련이 통과하지 못했습니다.');log('FTT 수신');return}
   if(type===T.FCF.MCF&&F.state==='wait-mcf'){await sendControl(T.frame(T.FCF.DCN),'DCN');F.state='done';setState('팩스 전송 완료','상대 팩스에서 MCF(정상 수신 확인)를 받았습니다.');log('MCF 수신 · 실제 팩스 전송 완료');return}
  }
- if(F.role==='rx'){
-  if(type===T.FCF.DCS&&F.state==='wait-dcs'){F.state='rx-training';setState('DCS 수신','상대가 페이지 전송을 요청했습니다. 현재 수신기는 제어 프레임까지 실제 해석합니다.');log('DCS 해석 완료 · V.27ter 수신 디코더 필요');await sendControl(T.frame(T.FCF.FTT),'FTT');F.state='rx-unsupported';setState('페이지 수신 보류','현재 빌드는 V.27ter 페이지 수신 복조기가 없어 FTT로 안전하게 재훈련을 요청했습니다.');return}
- }
+ if(F.role==='rx'&&type===T.FCF.DCS&&F.state==='wait-dcs'){F.state='rx-training';setState('DCS 수신','상대 송신기가 페이지 전송을 시작하려고 합니다.');log('DCS 해석 완료 · 페이지 모뎀 단계 진입');await sendControl(T.frame(T.FCF.FTT),'FTT');F.state='rx-unsupported';setState('페이지 수신 복조 미지원','현재 빌드는 V.27ter 페이지 수신기가 아직 없어 FTT를 보냈습니다. 상대 앱에서 전송 실패로 표시될 수 있습니다.');return}
 }
 async function startTx(){if(!F.page)throw Error('먼저 JPG/PNG/WebP 이미지를 선택해 팩스 페이지로 변환하세요.');setState('마이크 준비 중','송신과 동시에 상대 팩스 응답을 듣기 위해 마이크를 엽니다.');await openAudio();F.role='tx';F.state='calling';F.cng=F.ced=0;stopTone();setState('팩스 호출 중','마이크가 활성화되었습니다. 실제 팩스 번호로 전화 연결 후 스피커폰 상태를 유지하세요. CNG를 보내며 DIS를 기다립니다.');log('실제 FAX TX 시작');const pulse=async()=>{if(F.state!=='calling')return;await tone(1100,.5);log('CNG 1100 Hz')};pulse();F.timer=setInterval(pulse,3500);$('#faxStop').classList.remove('hidden')}
-async function startRx(){setState('마이크 준비 중','팩스 호출을 듣기 위해 마이크를 엽니다.');await openAudio();F.role='rx';F.state='wait-cng';F.cng=F.ced=0;setState('실제 팩스 수신 대기','상대 송신기의 CNG를 기다립니다.');log('실제 FAX RX 시작');$('#faxStop').classList.remove('hidden')}
+async function startRx(){setState('마이크 준비 중','팩스 호출을 듣기 위해 마이크를 엽니다.');await openAudio();F.role='rx';F.cng=F.ced=0;$('#faxStop').classList.remove('hidden');log('실제 FAX RX 시작');setState('팩스 응답 시작','전화가 이미 연결된 것으로 보고 CNG를 기다리지 않고 CED와 DIS를 즉시 전송합니다.');await delay(180);await answerAsFax()}
 async function answerAsFax(){if(F.busy)return;F.busy=true;try{F.state='answering';setState('팩스 응답 중','CED 2100 Hz를 전송합니다.');await tone(2100,3);log('CED 2100 Hz 3초');await delay(120);await sendControl(T.makeDIS(),'DIS');F.state='wait-dcs';setState('DCS 대기','상대 송신기의 전송 조건 선택을 기다립니다.')}finally{F.busy=false}}
 async function sendCed(){await openAudio();await tone(2100,3);log('CED 수동 전송')}
 function stop(){stopTone();if(F.scriptNode)F.scriptNode.onaudioprocess=null;F.stream?.getTracks().forEach(t=>t.stop());try{F.ctx?.close()}catch{}F.ctx=F.stream=F.src=F.node=F.silent=F.scriptNode=F.decoder=null;F.role=null;F.state='idle';micStatus('마이크: 꺼짐');$('#faxStop').classList.add('hidden');setState('중지됨','팩스 오디오 세션을 종료했습니다.');log('FAX Lab 중지')}
